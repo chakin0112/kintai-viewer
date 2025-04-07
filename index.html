@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>勤怠閲覧・修正申請</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    table, th, td { border: 1px solid #ccc; border-collapse: collapse; padding: 5px; }
+    select, input, button { margin: 5px; }
+  </style>
+</head>
+<body>
+  <h2>ログイン</h2>
+  <!-- 名前選択＆パスワード入力 -->
+  <select id="name"></select>
+  <input type="password" id="pw" placeholder="パスワード">
+  <button onclick="login()">ログイン</button>
+
+  <div id="result"></div>
+
+  <script>
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbyFNtp3DAoWCjcv3CIdZSJSPhSfuwg69L0HbkIFb7ndQvRUFBABukeHuzS-rUrhmAaC/exec"; // 例: https://script.google.com/macros/s/xxxxx/exec
+
+    let globalName = "";
+    let globalId = "";
+
+    // ===== ページ読み込み時に名前一覧を取得 =====
+    fetch(`${GAS_URL}?mode=names`)
+      .then(res => res.json())
+      .then(names => {
+        const select = document.getElementById("name");
+        names.forEach(name => {
+          const opt = document.createElement("option");
+          opt.textContent = name;
+          select.appendChild(opt);
+        });
+      });
+
+    // ===== ログイン処理（名前＋パスワード）=====
+    function login() {
+      const name = document.getElementById("name").value;
+      const pw = document.getElementById("pw").value;
+
+      fetch(`${GAS_URL}?mode=login&name=${encodeURIComponent(name)}&pw=${encodeURIComponent(pw)}`)
+        .then(res => res.json())
+        .then(res => {
+          if (res.error) {
+            alert("認証失敗");
+            return;
+          }
+          globalName = name;
+          globalId = res.id;
+          showTable(res.data);
+        });
+    }
+
+    // ===== 勤怠表を表示する処理 =====
+    function showTable(data) {
+      const div = document.getElementById("result");
+      div.innerHTML = `<h3>勤怠記録</h3><table><tr><th>日付</th><th>出勤</th><th>退勤</th><th>備考</th><th>修正</th></tr>
+        ${data.map(d => `
+          <tr>
+            <td>${d.date}</td>
+            <td>${d.start}</td>
+            <td>${d.end}</td>
+            <td>${d.note || ""}</td>
+            <td><button onclick="requestFix('${d.date}', '${d.start}', '${d.end}')">修正</button></td>
+          </tr>`).join("")}
+        </table>`;
+    }
+
+    // ===== 修正申請の入力処理（promptで） =====
+    function requestFix(date, beforeIn, beforeOut) {
+      const newIn = prompt("出勤の修正（空欄ならスキップ）", beforeIn);
+      const newOut = prompt("退勤の修正（空欄ならスキップ）", beforeOut);
+      const reason = prompt("修正理由を入力してください");
+
+      if (newIn && newIn !== beforeIn) submitFix("出勤", beforeIn, newIn, date, reason);
+      if (newOut && newOut !== beforeOut) submitFix("退勤", beforeOut, newOut, date, reason);
+    }
+
+    // ===== 修正申請データをGASへ送信 =====
+    function submitFix(item, before, after, date, reason) {
+      fetch(GAS_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "correction",
+          name: globalName,
+          date, item, before, after, reason
+        })
+      })
+      .then(res => res.text())
+      .then(res => alert("修正申請を送信しました"));
+    }
+  </script>
+</body>
+</html>
